@@ -128,8 +128,8 @@ void SpecificWorker::compute()
     static QGraphicsEllipseItem *target_draw = nullptr;
     static QPointF target;
     static bool posible;
-    qInfo() << target;
-
+    static bool closeto=false;
+    DSR::Node person_node=close_person(closeto);
     // Check for new published intention/plan
     if (auto plan_o = plan_buffer.try_get() ; plan_o.has_value())
     {
@@ -151,20 +151,26 @@ void SpecificWorker::compute()
 
         run_current_plan(target,posible);
     }
-    else if(close_person()) {
+    else if(closeto) {
         qInfo() << __FUNCTION__ << "Recalculate rute...";
         run_current_plan(target,posible);
-        if(auto path = G->get_nodes_by_type(path_to_target_type_name); not path.empty()){
-            if (not posible){
-                qInfo() << __FUNCTION__ << "Llegoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo";
-                auto robot= G->get_node(robot_name);
-                DSR::Edge edge_blocked = DSR::Edge::create<blocked_edge_type>(robot.value().id(),robot.value().id());
-                G->insert_or_assign_edge(edge_blocked);
-            }
+        auto robot= G->get_node(robot_name);
+        if (not posible){
+            auto robot= G->get_node(robot_name);
+            DSR::Edge edge_blocked = DSR::Edge::create<blocked_edge_type>(robot.value().id(),robot.value().id());
+            G->insert_or_assign_edge(edge_blocked);
+            DSR::Edge edge_blocking = DSR::Edge::create<is_blocking_edge_type>(robot.value().id(),person_node.id());
+            G->insert_or_assign_edge(edge_blocking);
         }
     }
     else //do whatever you do without a plan
     {}
+    if(posible) {
+        qInfo() << __FUNCTION__ << "Delete EDGE";
+        auto robot= G->get_node(robot_name);
+        G->delete_edge(robot.value().id(), robot.value().id(), "blocked");
+        G->delete_edge(robot.value().id(), person_node.id(), "is_blocking");
+    }
 
     update_grid();
 }
@@ -492,26 +498,30 @@ int SpecificWorker::startup_check()
 	return 0;
 }
 
-bool SpecificWorker::close_person()
+DSR::Node SpecificWorker::close_person(bool &closeto)
 {
     auto dist_max=10000000;
+    DSR::Node person_node;
     auto robot_pose_3d = inner_eigen->transform(world_name, robot_name).value();
     auto robot_pose = Eigen::Vector2f(robot_pose_3d.x(), robot_pose_3d.y());
     if(auto person = G->get_nodes_by_type(person_type_name); not person.empty()) {
         for (int i = 0; i < person.size(); ++i){
             auto person_pose= inner_eigen->transform(world_name, person[i].name()).value();
             auto dist= sqrt(pow(robot_pose[0]-person_pose.x(),2)+pow(robot_pose[0]-person_pose.y(),2));
-            if(dist<dist_max)
-                dist_max=dist;
+            if(dist<dist_max) {
+                dist_max = dist;
+                person_node = person[i];
+            }
         }
         qInfo() << dist_max;
         if (dist_max<threshold)
-            return true;
+            closeto=true;
         else
-            return false;
+            closeto=false;
     }
     else
-        return false;
+        closeto=false;
+    return person_node;
 }
 
 //void SpecificWorker::compute()

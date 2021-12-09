@@ -104,7 +104,7 @@ class SpecificWorker : public GenericWorker
         std::optional<QPointF> search_a_feasible_target(Plan &current_plan);
         void run_current_plan(const QPointF &target,bool &posible);
         void update_grid();
-        bool close_person ();
+        DSR::Node close_person (bool &closeto);
         float threshold=2000;
 
         std::shared_ptr<Collisions> collisions;
